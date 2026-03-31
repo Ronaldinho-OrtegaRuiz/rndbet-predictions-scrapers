@@ -153,6 +153,7 @@ class Settings(BaseSettings):
     debug: bool = False
     supabase_url: str | None = None
     supabase_key: str | None = None
+    supabase_service_role_key: str | None = None
     supabase_ping_table: str | None = None
     playwright_headless: bool = False
     playwright_after_load_wait_seconds: float = 3.0
@@ -177,8 +178,14 @@ class Settings(BaseSettings):
                 "SUPABASE_ANON_KEY",
             )
         ) or None
+        service_key = (
+            (self.supabase_service_role_key or "").strip()
+            or os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+            or _read_dotenv_file("SUPABASE_SERVICE_ROLE_KEY")
+        ) or None
         object.__setattr__(self, "supabase_url", url)
         object.__setattr__(self, "supabase_key", key)
+        object.__setattr__(self, "supabase_service_role_key", service_key)
         return self
 
 

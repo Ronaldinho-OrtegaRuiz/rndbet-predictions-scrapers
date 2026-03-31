@@ -46,7 +46,7 @@ En **Windows** con **`uvicorn --reload`**, Playwright async en el mismo loop pue
 - Docs: http://127.0.0.1:8000/docs
 - Health: `GET /api/health`
 - Supabase (si hay `.env`): `GET /api/health/supabase`
-- **MakeYourStats:** `POST /api/scrape/makeyourstats` — sin body; abre directamente `https://makeyourstats.com/es/leagues`.
+- **MakeYourStats:** `POST /api/scrape/makeyourstats` — sin body; carga la página y recorre todas las competiciones (autocompletado + enlaces); respuesta con `page_url`, `document_title`, `items`.
 - `GET /` incluye `api_version` (p. ej. `0.3.1`).
 
 ## Tests

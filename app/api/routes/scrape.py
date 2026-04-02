@@ -1,80 +1,88 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.scrapers.makeyourstats_scraper import MAKEYOURSTATS_LEAGUES_URL, run_makeyourstats_flow
+from app.scrapers.sofascore_scraper import SOFASCORE_ES_URL, run_sofascore_league_flow
 
 router = APIRouter()
 
 
-class MakeYourStatsCompetitionItem(BaseModel):
+class SofaScoreLeagueItem(BaseModel):
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
-                "competition_id": 1,
+                "search": "Premier League",
                 "name": "Premier League",
-                "search": "inglaterra",
                 "ok": True,
-                "url": "https://makeyourstats.com/es/football/league/england/premier-league/8",
+                "url": "https://www.sofascore.com/es/football/tournament/england/premier-league/17",
+                "link_href": "/es/football/tournament/england/premier-league/17",
                 "link_text": "Premier League",
                 "error": None,
+                "standings_teams": ["Arsenal", "Liverpool"],
+                "standings_error": None,
             }
         }
     )
 
-    competition_id: int = Field(description="id en tu tabla `competitions`.")
-    name: str
-    search: str = Field(description="Texto usado en el autocompletado (país o liga).")
+    search: str = Field(description="Texto enviado al buscador global (#search-input).")
+    name: str = Field(description="Mismo que search; etiqueta legible de la competición.")
     ok: bool
     url: str | None = Field(
         default=None,
-        description="URL absoluta del enlace encontrado en el desplegable.",
+        description="URL de la página tras hacer clic en la primera opción de torneo.",
     )
-    link_text: str | None = Field(default=None, description="Texto visible del enlace.")
-    error: str | None = Field(
+    link_href: str | None = Field(default=None, description="href del primer enlace de torneo elegido.")
+    link_text: str | None = Field(default=None, description="Texto visible (p. ej. alt de la imagen).")
+    error: str | None = None
+    standings_teams: list[str] = Field(
+        default_factory=list,
+        description="Nombres en orden de clasificación (texto del span en la fila, no el slug de la URL).",
+    )
+    standings_error: str | None = Field(
         default=None,
-        description="Mensaje si no apareció el enlace esperado en `autocomplete-result-list`.",
+        description="Error al leer clasificación o sincronizar equipos con Supabase.",
     )
 
 
-class MakeYourStatsScrapeResponse(BaseModel):
+class SofaScorePageResponse(BaseModel):
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
-                "source_page": "https://makeyourstats.com/es/leagues",
-                "page_url": "https://makeyourstats.com/es/leagues",
-                "document_title": "Ligas de fútbol | MakeYourStats",
+                "source_page": "https://www.sofascore.com/es/",
+                "page_url": "https://www.sofascore.com/es/",
+                "document_title": "SofaScore",
                 "items": [],
             }
         }
     )
 
-    source_page: str = Field(default=MAKEYOURSTATS_LEAGUES_URL)
-    page_url: str = Field(description="URL tras la primera carga del flujo.")
-    document_title: str | None = Field(description="Contenido de <title> tras esa carga.")
-    items: list[MakeYourStatsCompetitionItem] = Field(
-        description="Una entrada por competición configurada en el scraper.",
+    source_page: str = Field(default=SOFASCORE_ES_URL)
+    page_url: str = Field(description="URL al cerrar el flujo (vuelta a home).")
+    document_title: str | None = Field(description="Contenido de <title> al final.")
+    items: list[SofaScoreLeagueItem] = Field(
+        description="Una fila por liga: primera opción con /football/tournament/ en el desplegable.",
     )
 
 
 @router.post(
-    "/makeyourstats",
-    response_model=MakeYourStatsScrapeResponse,
-    tags=["makeyourstats"],
-    operation_id="run_makeyourstats_scraper",
-    summary="Scraper MakeYourStats",
+    "/sofascore",
+    response_model=SofaScorePageResponse,
+    tags=["sofascore"],
+    operation_id="run_sofascore_scraper",
+    summary="Scraper SofaScore — búsqueda de ligas top",
     description=(
-        f"Sin cuerpo. Abre `{MAKEYOURSTATS_LEAGUES_URL}` y recorre todas las competiciones "
-        "(autocompletado y extracción de enlace por cada una)."
+        f"Sin cuerpo. Abre `{SOFASCORE_ES_URL}`, busca cada liga, entra al torneo, abre "
+        "«Clasificaciones» → «Todos», lee el nombre visible de cada fila e inserta en `teams` "
+        "(país fijo en ligas domésticas; en UEFA Champions/Europa, país desde la ficha del equipo)."
     ),
 )
-async def post_makeyourstats_scraper() -> MakeYourStatsScrapeResponse:
+async def post_sofascore_scraper() -> SofaScorePageResponse:
     try:
-        data = await run_makeyourstats_flow(include_competition_links=True)
+        data = await run_sofascore_league_flow()
         rows = data["items"]
-        return MakeYourStatsScrapeResponse(
+        return SofaScorePageResponse(
             page_url=data["url"],
             document_title=data["document_title"],
-            items=[MakeYourStatsCompetitionItem(**row) for row in rows],
+            items=[SofaScoreLeagueItem(**row) for row in rows],
         )
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc

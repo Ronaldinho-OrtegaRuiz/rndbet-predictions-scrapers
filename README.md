@@ -30,7 +30,7 @@ Prueba de conexión: **`GET /api/health/supabase`** (200 si responde la API de S
 
 - `PLAYWRIGHT_HEADLESS` — por defecto **`false`** (ventana visible en tu PC). En servidor/CI usá **`true`**.
 - `PLAYWRIGHT_AFTER_LOAD_WAIT_SECONDS` — segundos tras ver contenido clave en la página (por defecto **3**).
-- `PLAYWRIGHT_PAGE_READY_TIMEOUT_MS` — timeout esperando la marca “MakeYourStats” visible en `/es/leagues` (por defecto **120000**).
+- `PLAYWRIGHT_PAGE_READY_TIMEOUT_MS` — timeout de espera en páginas del scraper (por defecto **120000**).
 - `DEBUG` — `true` / `false`
 
 En **Windows** con **`uvicorn --reload`**, Playwright async en el mismo loop puede fallar; el scraper usa **Playwright síncrono en un hilo** (`asyncio.to_thread`).
@@ -46,7 +46,7 @@ En **Windows** con **`uvicorn --reload`**, Playwright async en el mismo loop pue
 - Docs: http://127.0.0.1:8000/docs
 - Health: `GET /api/health`
 - Supabase (si hay `.env`): `GET /api/health/supabase`
-- **MakeYourStats:** `POST /api/scrape/makeyourstats` — sin body; carga la página y recorre todas las competiciones (autocompletado + enlaces); respuesta con `page_url`, `document_title`, `items`.
+- **SofaScore:** `POST /api/scrape/sofascore` — sin body; ligas top, clasificación y sync de equipos a Supabase; respuesta con `page_url`, `document_title`, `items`.
 - `GET /` incluye `api_version` (p. ej. `0.3.1`).
 
 ## Tests

@@ -16,6 +16,7 @@ dependencies = [
     "playwright>=1.49.0",
     "pydantic-settings>=2.6.0",
     "supabase>=2.10.0",
+    "tzdata>=2024.1",
     "uvicorn[standard]>=0.32.0",
 ]
 

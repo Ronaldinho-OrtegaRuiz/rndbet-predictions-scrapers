@@ -21,6 +21,15 @@ env/
 .coverage
 htmlcov/
 
+# Scraper progreso local
+var/
+
+# Variante experimental 2 hilos (solo local; no versionar)
+app/scrapers/sofascore_statistics_historics_2hilos.py
+
+# Spec / notas locales
+spec.text
+
 # OS
 .DS_Store
 Thumbs.db

@@ -1,6 +1,6 @@
 import asyncio
 import sys
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 # Playwright arranca el driver con subprocess; en Windows el SelectorEventLoop
 # no implementa subprocess → NotImplementedError. Proactor sí.
@@ -17,7 +17,18 @@ from app.core.config import settings
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    yield
+    from asyncio import CancelledError
+
+    from live_track.queue_bus import cancel_pending_scheduled_async, run_sofascore_round_robin_loop
+
+    robin = asyncio.create_task(run_sofascore_round_robin_loop())
+    try:
+        yield
+    finally:
+        robin.cancel()
+        with suppress(CancelledError):
+            await robin
+        await cancel_pending_scheduled_async()
 
 
 class _NoCacheOpenAPIMiddleware(BaseHTTPMiddleware):

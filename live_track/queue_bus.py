@@ -8,7 +8,8 @@ Live-track SofaScore: **kickoff → lista activa** + **round-robin** infinito.
    incorporados** (varios pueden solaparse en el tiempo cuando van entrando por kickoff).
 3. Lista vacía → espera (`robin_empty_list_sleep_seconds`).
 
-Stats en vivo: mismo `_process_sofascore_tick` más adelante.
+Cada tick: scrape + POST (`LIVE_TRACK_BACKEND_LIVE_PUSH_URL`). Si `status` es **FINISHED**,
+se quita el partido de `_rr_items` y del JSON `var/live-track/{fecha_referencia}.json`.
 """
 
 from __future__ import annotations
@@ -18,11 +19,14 @@ import logging
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 
 from live_track.schemas import LiveTrackPayload
 from live_track.settings import live_track_settings
 
 log = logging.getLogger("live_track.robin")
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
 
 _rr_lock = asyncio.Lock()
 _rr_items: list[MatchLookupWorkItem] = []
@@ -39,8 +43,11 @@ class MatchLookupWorkItem:
     competicion: str
     equipo_local: str
     equipo_visitante: str
+    home_team_id: int | None = None
+    away_team_id: int | None = None
     jornada: int | None = None
     fase: str | None = None
+    round_label: str | None = None
     grupo: str | None = None
 
 
@@ -79,12 +86,32 @@ def _items_from_payload(payload: LiveTrackPayload) -> list[MatchLookupWorkItem]:
                 competicion=p.competicion,
                 equipo_local=p.equipo_local,
                 equipo_visitante=p.equipo_visitante,
+                home_team_id=p.home_team_id,
+                away_team_id=p.away_team_id,
                 jornada=p.jornada,
                 fase=p.fase,
+                round_label=p.round_label,
                 grupo=p.grupo,
             )
         )
     return out
+
+
+async def remove_round_robin_item(item: MatchLookupWorkItem) -> None:
+    key = _robin_dedupe_key(item)
+    async with _rr_lock:
+        before = len(_rr_items)
+        _rr_items[:] = [x for x in _rr_items if _robin_dedupe_key(x) != key]
+        remaining = len(_rr_items)
+        removed = before - remaining
+    if removed:
+        log.info(
+            "round-robin: −partido FINISHED match_id=%s %s vs %s (quedan=%s)",
+            item.match_id,
+            item.equipo_local,
+            item.equipo_visitante,
+            remaining,
+        )
 
 
 async def add_to_round_robin_if_absent(item: MatchLookupWorkItem) -> None:
@@ -172,8 +199,16 @@ async def run_sofascore_round_robin_loop() -> None:
             await asyncio.sleep(pause)
 
 
+def _snapshot_status_finished(body: dict[str, object]) -> bool:
+    return str(body.get("status") or "").strip().upper() == "FINISHED"
+
+
 async def _process_sofascore_tick(item: MatchLookupWorkItem) -> None:
-    """Una visita a SofaScore para este partido (stub). Más adelante: stats en el mismo sitio."""
+    """Scrape SofaScore (sync en thread) y POST del snapshot al backend si está configurado."""
+    from live_track.push_backend import push_live_snapshot_async
+    from live_track.sofascore_live_snapshot import scrape_backend_snapshot_sync
+    from live_track.storage import remove_partido_from_live_track
+
     log.debug(
         "SofaScore tick match_id=%s %s vs %s (%s)",
         item.match_id,
@@ -181,3 +216,33 @@ async def _process_sofascore_tick(item: MatchLookupWorkItem) -> None:
         item.equipo_visitante,
         item.competicion,
     )
+    body = await asyncio.to_thread(scrape_backend_snapshot_sync, item)
+    if not body:
+        return
+    try:
+        await push_live_snapshot_async(body)
+    except Exception:
+        log.exception("push snapshot falló match_id=%s", item.match_id)
+    if _snapshot_status_finished(body):
+        await remove_round_robin_item(item)
+        try:
+            if remove_partido_from_live_track(
+                _REPO_ROOT,
+                item.fecha_referencia,
+                match_id=item.match_id,
+                competicion=item.competicion,
+                equipo_local=item.equipo_local,
+                equipo_visitante=item.equipo_visitante,
+                kickoff_utc=item.kickoff,
+            ):
+                log.info(
+                    "live-track: partido quitado del JSON fecha=%s match_id=%s",
+                    item.fecha_referencia,
+                    item.match_id,
+                )
+        except Exception:
+            log.exception(
+                "live-track: no se pudo quitar del JSON fecha=%s match_id=%s",
+                item.fecha_referencia,
+                item.match_id,
+            )

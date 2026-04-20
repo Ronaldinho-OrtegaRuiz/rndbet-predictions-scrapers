@@ -20,8 +20,14 @@ class PartidoPendiente(BaseModel):
     competicion: str
     equipo_local: str
     equipo_visitante: str
+    home_team_id: int | None = Field(default=None, description="teams.id local (opcional; si no, se resuelve por nombre en BD).")
+    away_team_id: int | None = Field(default=None, description="teams.id visitante (opcional).")
     jornada: int | None = None
     fase: str | None = None
+    round_label: str | None = Field(
+        default=None,
+        description="Texto exacto del desplegable de ronda en SofaScore (ej. Jornada 7, Octavos de final).",
+    )
     grupo: str | None = Field(default=None, description='matches."group"; no usado en flujo actual doméstico/UEFA list.')
 
 

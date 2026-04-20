@@ -48,6 +48,7 @@ async def post_live_track_run(
         "`var/live-track/{fecha}.json`. Por cada partido se **programa el ingreso al round-robin** "
         "a la **hora de `fecha`** (kickoff); pasado ese momento el partido entra en la ronda. "
         "Un worker recorre **solo los ya incorporados** en bucle 1→N→1→N… (partidos cruzados en el tiempo). "
+        "Cuando el snapshot marca `FINISHED`, el partido sale de la cola y del JSON en disco. "
         "Re-ingest cancela timers pendientes y reprograma. Pausas: `LIVE_TRACK_ROBIN_*`."
     ),
 )
